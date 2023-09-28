@@ -60,7 +60,8 @@ enum Actions
   EA_MOVE_UP,
   EA_MOVE_END,
   EA_ATTACK = EA_MOVE_END,
-  EA_NUM
+  EA_NUM,
+  EA_HEAL
 };
 
 struct Action
@@ -82,6 +83,12 @@ struct MeleeDamage
 struct HealAmount
 {
   float amount = 0.f;
+};
+
+struct Cooldown
+{
+	int cooldown = 0;
+	int passed = 0;
 };
 
 struct PowerupAmount

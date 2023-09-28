@@ -126,6 +126,27 @@ public:
   void act(float/* dt*/, flecs::world &ecs, flecs::entity entity) const override {}
 };
 
+class HealSelfState : public State
+{
+public:
+    void enter() const override {}
+    void exit() const override {}
+    void act(float/* dt*/, flecs::world& ecs, flecs::entity entity) const override
+    {
+        entity.set([&](Action& a, Hitpoints& hp, const HealAmount& healAmount, Cooldown& healCD)
+            {
+                if (healCD.passed >= healCD.cooldown)
+                {
+                    healCD.passed = 0;
+                    hp.hitpoints += healAmount.amount;
+                    a.action = EA_HEAL;
+                }
+                else
+                    a.action = EA_NOP;
+            });
+    }
+};
+
 class EnemyAvailableTransition : public StateTransition
 {
   float triggerDist;
@@ -189,20 +210,38 @@ public:
 
 class AndTransition : public StateTransition
 {
-  const StateTransition *lhs; // we own it
-  const StateTransition *rhs; // we own it
+    const StateTransition* lhs; // we own it
+    const StateTransition* rhs; // we own it
 public:
-  AndTransition(const StateTransition *in_lhs, const StateTransition *in_rhs) : lhs(in_lhs), rhs(in_rhs) {}
-  ~AndTransition() override
-  {
-    delete lhs;
-    delete rhs;
-  }
+    AndTransition(const StateTransition* in_lhs, const StateTransition* in_rhs) : lhs(in_lhs), rhs(in_rhs) {}
+    ~AndTransition() override
+    {
+        delete lhs;
+        delete rhs;
+    }
 
-  bool isAvailable(flecs::world &ecs, flecs::entity entity) const override
-  {
-    return lhs->isAvailable(ecs, entity) && rhs->isAvailable(ecs, entity);
-  }
+    bool isAvailable(flecs::world& ecs, flecs::entity entity) const override
+    {
+        return lhs->isAvailable(ecs, entity) && rhs->isAvailable(ecs, entity);
+    }
+};
+
+class OrTransition : public StateTransition
+{
+    const StateTransition* lhs; // we own it
+    const StateTransition* rhs; // we own it
+public:
+    OrTransition(const StateTransition* in_lhs, const StateTransition* in_rhs) : lhs(in_lhs), rhs(in_rhs) {}
+    ~OrTransition() override
+    {
+        delete lhs;
+        delete rhs;
+    }
+
+    bool isAvailable(flecs::world& ecs, flecs::entity entity) const override
+    {
+        return lhs->isAvailable(ecs, entity) || rhs->isAvailable(ecs, entity);
+    }
 };
 
 
@@ -232,6 +271,11 @@ State *create_nop_state()
   return new NopState();
 }
 
+State* create_heal_self_state()
+{
+    return new HealSelfState();
+}
+
 // transitions
 StateTransition *create_enemy_available_transition(float dist)
 {
@@ -252,8 +296,12 @@ StateTransition *create_negate_transition(StateTransition *in)
 {
   return new NegateTransition(in);
 }
-StateTransition *create_and_transition(StateTransition *lhs, StateTransition *rhs)
+StateTransition* create_and_transition(StateTransition* lhs, StateTransition* rhs)
 {
-  return new AndTransition(lhs, rhs);
+    return new AndTransition(lhs, rhs);
+}
+StateTransition* create_or_transition(StateTransition* lhs, StateTransition* rhs)
+{
+    return new OrTransition(lhs, rhs);
 }
 
