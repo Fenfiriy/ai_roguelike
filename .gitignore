@@ -60,3 +60,6 @@ CMakeCache.txt
 compile_commands.json
 build/*
 *.vsidx
+
+out/
+.vs/
