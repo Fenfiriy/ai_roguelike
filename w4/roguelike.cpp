@@ -162,7 +162,7 @@ static void create_player(flecs::world &ecs, const char *texture_src)
     .set(NumActions{2, 0})
     .set(Color{255, 255, 255, 255})
     .add<TextureSource>(textureSrc)
-    .set(MeleeDamage{50.f});
+    .set(MeleeDamage{20.f});
 }
 
 static void create_heal(flecs::world &ecs, int x, int y, float amount)
@@ -203,10 +203,15 @@ static void register_roguelike_systems(flecs::world &ecs)
       inp.right = right;
       inp.up = up;
       inp.down = down;
+
+      bool pass = IsKeyDown(KEY_SPACE);
+      if (pass && !inp.passed)
+        a.action = EA_PASS;
+      inp.passed = pass;
     });
   ecs.system<const Position, const Color>()
-    .term<TextureSource>(flecs::Wildcard)
-    .term<BackgroundTile>()
+    .with<TextureSource>(flecs::Wildcard)
+    .with<BackgroundTile>()
     .each([&](flecs::entity e, const Position &pos, const Color color)
     {
       const auto textureSrc = e.target<TextureSource>();
@@ -215,15 +220,15 @@ static void register_roguelike_systems(flecs::world &ecs)
           Rectangle{float(pos.x) * tile_size, float(pos.y) * tile_size, tile_size, tile_size}, color);
     });
   ecs.system<const Position, const Color>()
-    .term<TextureSource>(flecs::Wildcard).not_()
+    .without<TextureSource>(flecs::Wildcard)
     .each([&](const Position &pos, const Color color)
     {
       const Rectangle rect = {float(pos.x) * tile_size, float(pos.y) * tile_size, tile_size, tile_size};
       DrawRectangleRec(rect, color);
     });
   ecs.system<const Position, const Color>()
-    .term<TextureSource>(flecs::Wildcard)
-    .term<BackgroundTile>().not_()
+    .with<TextureSource>(flecs::Wildcard)
+    .without<BackgroundTile>()
     .each([&](flecs::entity e, const Position &pos, const Color color)
     {
       const auto textureSrc = e.target<TextureSource>();
@@ -250,7 +255,7 @@ static void register_roguelike_systems(flecs::world &ecs)
       SetTextureFilter(tex, TEXTURE_FILTER_POINT);
     });
   ecs.system<const DmapWeights>()
-    .term<VisualiseMap>()
+    .with<VisualiseMap>()
     .each([&](const DmapWeights &wt)
     {
       dungeonDataQuery.each([&](const DungeonData &dd)
@@ -277,7 +282,7 @@ static void register_roguelike_systems(flecs::world &ecs)
       });
     });
   ecs.system<const DijkstraMapData>()
-    .term<VisualiseMap>()
+    .with<VisualiseMap>()
     .each([](const DijkstraMapData &dmap)
     {
       dungeonDataQuery.each([&](const DungeonData &dd)
@@ -567,6 +572,7 @@ void process_turn(flecs::world &ecs)
 
     //ecs.entity("flee_map").add<VisualiseMap>();
     ecs.entity("hive_follower_sum")
+      //.set(DmapWeights{{{"flee_map", {1.f, 1.f}}}})
       .set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8f, 0.8f}}}})
       .add<VisualiseMap>();
   }

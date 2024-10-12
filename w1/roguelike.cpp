@@ -214,14 +214,14 @@ static void register_roguelike_systems(flecs::world &ecs)
       inp.down = down;
     });
   ecs.system<const Position, const Color>()
-    .term<TextureSource>(flecs::Wildcard).not_()
+    .without<TextureSource>(flecs::Wildcard)
     .each([&](const Position &pos, const Color color)
     {
       const Rectangle rect = {float(pos.x), float(pos.y), 1, 1};
       DrawRectangleRec(rect, color);
     });
   ecs.system<const Position, const Color>()
-    .term<TextureSource>(flecs::Wildcard)
+    .with<TextureSource>(flecs::Wildcard)
     .each([&](flecs::entity e, const Position &pos, const Color color)
     {
       const auto textureSrc = e.target<TextureSource>();
