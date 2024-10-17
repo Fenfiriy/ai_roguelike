@@ -68,6 +68,34 @@ static void on_closest_enemy_pos(flecs::world &ecs, flecs::entity entity, Callab
 }
 
 template<typename Callable>
+static void on_closest_enemy_hp(flecs::world& ecs, flecs::entity entity, Callable c)
+{
+	static auto enemiesQuery = ecs.query<const Position, const Team, Hitpoints>();
+	entity.insert([&](const Position& pos, const Team& t, Action& a)
+		{
+			flecs::entity closestEnemy;
+			float closestDist = FLT_MAX;
+			Position closestPos;
+			Hitpoints* closestHp;
+			enemiesQuery.each([&](flecs::entity enemy, const Position& epos, const Team& et, Hitpoints& hp)
+			{
+				if (t.team == et.team)
+					return;
+				float curDist = dist(epos, pos);
+				if (curDist < closestDist)
+				{
+					closestDist = curDist;
+					closestPos = epos;
+					closestEnemy = enemy;
+					closestHp = &hp;
+				}
+			});
+			if (ecs.is_valid(closestEnemy))
+				c(a, pos, closestHp);
+		});
+}
+
+template<typename Callable>
 static void on_player_pos(flecs::world& ecs, flecs::entity entity, Callable c)
 {
 	static auto playerStatsQuery = ecs.query<const IsPlayer, const Position>();
@@ -153,6 +181,24 @@ public:
   void act(float/* dt*/, flecs::world &ecs, flecs::entity entity) const override {}
 };
 
+class RangeAttackState : public State
+{
+public:
+	void enter() const override {}
+	void exit() const override {}
+	void act(float/* dt*/, flecs::world& ecs, flecs::entity entity) const override
+	{
+		entity.insert([&](Action& a, const RangedDamage& range_dmg)
+		{
+			on_closest_enemy_hp(ecs, entity, [&](Action& a, const Position& pos, Hitpoints* hp)
+			{
+				a.action = EA_SHOOT;
+				hp->hitpoints -= range_dmg.damage;
+			});
+		});
+	}
+};
+
 class HealState : public State
 {
 public:
@@ -161,9 +207,9 @@ public:
 	void act(float/* dt*/, flecs::world& ecs, flecs::entity entity) const override
 	{
 		entity.insert([&](Action& a, Hitpoints& hp, const HealAmount& healAmount, Cooldown& healCD)
-			{
-				a.action = EA_HEAL;
-			});
+		{
+			a.action = EA_HEAL;
+		});
 	}
 };
 
@@ -330,6 +376,11 @@ State *create_patrol_state(float patrol_dist)
 State *create_nop_state()
 {
   return new NopState();
+}
+
+State* create_range_attack_state()
+{
+	return new RangeAttackState();
 }
 
 State* create_heal_state()

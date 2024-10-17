@@ -9,6 +9,7 @@ State* create_move_to_player_state();
 State *create_flee_from_enemy_state();
 State *create_patrol_state(float patrol_dist);
 State *create_nop_state();
+State* create_range_attack_state();
 State* create_heal_state();
 
 // transitions

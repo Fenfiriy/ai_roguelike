@@ -44,6 +44,20 @@ static void add_attack_sm(flecs::entity entity)
   });
 }
 
+static void add_archer_sm(flecs::entity entity)
+{
+	entity.get([](StateMachine& sm)
+	{
+		int patrol = sm.addState(create_patrol_state(3.f));
+		int fleeFromEnemy = sm.addState(create_flee_from_enemy_state());
+		int shoot = sm.addState(create_range_attack_state());
+		
+		sm.addTransition(create_enemy_available_transition(3.f), shoot, fleeFromEnemy);
+		sm.addTransition(create_enemy_available_transition(5.f), patrol, shoot);
+		sm.addTransition(create_negate_transition(create_enemy_available_transition(7.f)), fleeFromEnemy, patrol);
+	});
+}
+
 static void add_paladin_sm(flecs::entity entity)
 {
 	entity.get([](StateMachine& sm)
@@ -73,6 +87,22 @@ static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color color
 	.set(Team{1})
 	.set(NumActions{1, 0})
 	.set(MeleeDamage{20.f});
+}
+
+static flecs::entity create_archer(flecs::world& ecs, int x, int y, Color color)
+{
+	return ecs.entity()
+		.set(Position{ x, y })
+		.set(MovePos{ x, y })
+		.set(PatrolPos{ x, y })
+		.set(Hitpoints{ 100.f })
+		.set(Action{ EA_NOP })
+		.set(Color{ color })
+		.set(StateMachine{})
+		.set(Team{ 1 })
+		.set(NumActions{ 1, 0 })
+		.set(MeleeDamage{ 20.f })
+		.set(RangedDamage{ 10.f });
 }
 
 static flecs::entity create_paladin(flecs::world &ecs, int x, int y, Color color)
@@ -168,12 +198,13 @@ void init_roguelike(flecs::world &ecs)
 {
   register_roguelike_systems(ecs);
 
-  add_patrol_attack_flee_sm(create_monster(ecs, 5, 5, GetColor(0xee00eeff)));
-  add_patrol_attack_flee_sm(create_monster(ecs, 10, -5, GetColor(0xee00eeff)));
+  //add_patrol_attack_flee_sm(create_monster(ecs, 5, 5, GetColor(0xee00eeff)));
+  //add_patrol_attack_flee_sm(create_monster(ecs, 10, -5, GetColor(0xee00eeff)));
   //add_patrol_flee_sm(create_monster(ecs, -5, -5, GetColor(0x111111ff)));
   //add_attack_sm(create_monster(ecs, -5, 5, GetColor(0x880000ff)));
 
-  add_paladin_sm(create_paladin(ecs, -5, -5, GetColor(0x111111ff)));
+  add_archer_sm(create_archer(ecs, -5, 5, GetColor(0x880000ff)));
+  //add_paladin_sm(create_paladin(ecs, -5, -5, GetColor(0x111111ff)));
 
   create_player(ecs, 0, 0);
 
