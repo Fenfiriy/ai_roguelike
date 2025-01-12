@@ -47,14 +47,28 @@ static void add_attack_sm(flecs::entity entity)
 static void add_archer_sm(flecs::entity entity)
 {
 	entity.get([](StateMachine& sm)
+		{
+			int patrol = sm.addState(create_patrol_state(3.f));
+			int fleeFromEnemy = sm.addState(create_flee_from_enemy_state());
+			int shoot = sm.addState(create_range_attack_state());
+
+			sm.addTransition(create_enemy_available_transition(3.f), shoot, fleeFromEnemy);
+			sm.addTransition(create_enemy_available_transition(5.f), patrol, shoot);
+			sm.addTransition(create_negate_transition(create_enemy_available_transition(7.f)), fleeFromEnemy, patrol);
+		});
+}
+
+void add_slime_sm(flecs::entity entity)
+{
+	entity.get([](StateMachine& sm)
 	{
 		int patrol = sm.addState(create_patrol_state(3.f));
-		int fleeFromEnemy = sm.addState(create_flee_from_enemy_state());
-		int shoot = sm.addState(create_range_attack_state());
+		int split = sm.addState(create_split_state());
 		
-		sm.addTransition(create_enemy_available_transition(3.f), shoot, fleeFromEnemy);
-		sm.addTransition(create_enemy_available_transition(5.f), patrol, shoot);
-		sm.addTransition(create_negate_transition(create_enemy_available_transition(7.f)), fleeFromEnemy, patrol);
+		sm.addTransition(
+						create_and_transition(create_hitpoints_less_than_transition(200.f), create_split_available_transition()),
+						patrol, split);
+		sm.addTransition(create_negate_transition(create_split_available_transition()), split, patrol);
 	});
 }
 
@@ -68,9 +82,15 @@ static void add_paladin_sm(flecs::entity entity)
 		
 		sm.addTransition(create_enemy_available_transition(3.f), followPlayer, moveToEnemy);
 		sm.addTransition(create_negate_transition(create_enemy_available_transition(5.f)), moveToEnemy, followPlayer);
-		sm.addTransition(create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f)), moveToEnemy, heal);
-		sm.addTransition(create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f)), followPlayer, heal);
-		sm.addTransition(create_negate_transition(create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f))), heal, followPlayer);
+		sm.addTransition(create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f)),
+						moveToEnemy, heal);
+		sm.addTransition(create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f)),
+						followPlayer, heal);
+		sm.addTransition(
+						create_negate_transition(
+							create_and_transition(create_player_available_transition(3.f), create_player_hitpoints_less_than_transition(50.f))
+						),
+						heal, followPlayer);
 	});
 }
 
@@ -87,6 +107,21 @@ static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color color
 	.set(Team{1})
 	.set(NumActions{1, 0})
 	.set(MeleeDamage{20.f});
+}
+
+flecs::entity create_slime(flecs::world& ecs, int x, int y, Color color, float hp)
+{
+	return ecs.entity()
+		.set(Position{ x, y })
+		.set(MovePos{ x, y })
+		.set(PatrolPos{ x, y })
+		.set(Hitpoints{ hp })
+		.set(Action{ EA_NOP })
+		.set(Color{ color })
+		.set(StateMachine{})
+		.set(Team{ 1 })
+		.set(NumActions{ 1, 0 })
+		.set(MeleeDamage{ 20.f });
 }
 
 static flecs::entity create_archer(flecs::world& ecs, int x, int y, Color color)
@@ -134,7 +169,7 @@ static void create_player(flecs::world &ecs, int x, int y)
 	.set(Team{0})
 	.set(PlayerInput{})
 	.set(NumActions{2, 0})
-	.set(MeleeDamage{50.f});
+	.set(MeleeDamage{51.f});
 }
 
 static void create_heal(flecs::world &ecs, int x, int y, float amount)
@@ -203,17 +238,18 @@ void init_roguelike(flecs::world &ecs)
   //add_patrol_flee_sm(create_monster(ecs, -5, -5, GetColor(0x111111ff)));
   //add_attack_sm(create_monster(ecs, -5, 5, GetColor(0x880000ff)));
 
-  add_archer_sm(create_archer(ecs, -5, 5, GetColor(0x880000ff)));
+  add_slime_sm(create_slime(ecs, 5, 5, GetColor(0xee00eeff), 100.f).add<SplitAvailable>());
+  //add_archer_sm(create_archer(ecs, -5, 5, GetColor(0x880000ff)));
   //add_paladin_sm(create_paladin(ecs, -5, -5, GetColor(0x111111ff)));
 
   create_player(ecs, 0, 0);
 
-  create_powerup(ecs, 7, 7, 10.f);
+  /*create_powerup(ecs, 7, 7, 10.f);
   create_powerup(ecs, 10, -6, 10.f);
   create_powerup(ecs, 10, -4, 10.f);
 
   create_heal(ecs, -5, -5, 50.f);
-  create_heal(ecs, -5, 5, 50.f);
+  create_heal(ecs, -5, 5, 50.f);*/
 }
 
 static bool is_player_acted(flecs::world &ecs)
@@ -257,6 +293,7 @@ static void process_actions(flecs::world &ecs)
   static auto processActions = ecs.query<Action, Position, MovePos, const MeleeDamage, const Team>();
   static auto processHeal = ecs.query<Action, HealAmount, Cooldown>();
   static auto checkAttacks = ecs.query<const MovePos, Hitpoints, const Team>();
+  static auto processSplit = ecs.query<Action, Hitpoints, SplitAvailable>();
   static auto playerStatsQuery = ecs.query<const IsPlayer, Hitpoints>();
   // Process all actions
   ecs.defer([&]
@@ -294,6 +331,17 @@ static void process_actions(flecs::world &ecs)
 		else
 			a.action = EA_NOP;
 	});
+
+	/*processSplit.each([&](flecs::entity entity, Action& a, Hitpoints& hp, const SplitAvailable&)
+		{
+			if (a.action == EA_SPLIT)
+			{
+				entity.remove<SplitAvailable>();
+				add_slime_sm(create_slime(ecs, entity.get<Position>()->x + 1, entity.get<Position>()->y, *entity.get<Color>()));
+			}
+			else
+				a.action = EA_NOP;
+		});*/
 
 	// now move
 	processActions.each([&](flecs::entity entity, Action &a, Position &pos, MovePos &mpos, const MeleeDamage &, const Team&)

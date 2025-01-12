@@ -11,6 +11,7 @@ State *create_patrol_state(float patrol_dist);
 State *create_nop_state();
 State* create_range_attack_state();
 State* create_heal_state();
+State* create_split_state();
 
 // transitions
 StateTransition *create_enemy_available_transition(float dist);
@@ -18,6 +19,7 @@ StateTransition* create_player_available_transition(float dist);
 StateTransition *create_enemy_reachable_transition();
 StateTransition *create_hitpoints_less_than_transition(float thres);
 StateTransition* create_player_hitpoints_less_than_transition(float thres);
+StateTransition* create_split_available_transition();
 StateTransition *create_negate_transition(StateTransition *in);
 StateTransition *create_and_transition(StateTransition *lhs, StateTransition *rhs);
 StateTransition* create_or_transition(StateTransition* lhs, StateTransition* rhs);

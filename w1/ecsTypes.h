@@ -62,7 +62,8 @@ enum Actions
   EA_ATTACK = EA_MOVE_END,
   EA_NUM,
   EA_SHOOT,
-  EA_HEAL
+  EA_HEAL,
+  EA_SPLIT
 };
 
 struct Action
@@ -96,6 +97,8 @@ struct Cooldown
 	int cooldown = 0;
 	int passed = 0;
 };
+
+struct SplitAvailable {};
 
 struct PowerupAmount
 {

@@ -13,6 +13,9 @@ public:
   void act(float/* dt*/, flecs::world &/*ecs*/, flecs::entity /*entity*/) const override {}
 };
 
+flecs::entity create_slime(flecs::world& ecs, int x, int y, Color color, float hp);
+void add_slime_sm(flecs::entity entity);
+
 template<typename T>
 T sqr(T a){ return a*a; }
 
@@ -207,9 +210,24 @@ public:
 	void act(float/* dt*/, flecs::world& ecs, flecs::entity entity) const override
 	{
 		entity.insert([&](Action& a, Hitpoints& hp, const HealAmount& healAmount, Cooldown& healCD)
-		{
-			a.action = EA_HEAL;
-		});
+			{
+				a.action = EA_HEAL;
+			});
+	}
+};
+
+class SplitState : public State
+{
+public:
+	void enter() const override {}
+	void exit() const override {}
+	void act(float/* dt*/, flecs::world& ecs, flecs::entity entity) const override
+	{
+		entity.insert([&](Action& a, Position& pos, Color& clr, Hitpoints& hp, SplitAvailable& sa)
+			{
+				add_slime_sm(create_slime(ecs, pos.x + 1, pos.y + 1, clr, hp.hitpoints));
+				
+			});
 	}
 };
 
@@ -271,6 +289,15 @@ public:
 	});
 	return hitpointsThresholdReached;
   }
+};
+
+class SplitAvailableTransition : public StateTransition
+{
+public:
+	bool isAvailable(flecs::world& ecs, flecs::entity entity) const override
+	{
+		return entity.has<SplitAvailable>();
+	}
 };
 
 class PlayerHitpointsLessThanTransition : public StateTransition
@@ -388,6 +415,11 @@ State* create_heal_state()
 	return new HealState();
 }
 
+State* create_split_state()
+{
+	return new SplitState();
+}
+
 // transitions
 StateTransition *create_enemy_available_transition(float dist)
 {
@@ -412,6 +444,11 @@ StateTransition *create_hitpoints_less_than_transition(float thres)
 StateTransition* create_player_hitpoints_less_than_transition(float thres)
 {
 	return new PlayerHitpointsLessThanTransition(thres);
+}
+
+StateTransition* create_split_available_transition()
+{
+	return new SplitAvailableTransition();
 }
 
 StateTransition *create_negate_transition(StateTransition *in)
