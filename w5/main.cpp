@@ -223,12 +223,13 @@ static void debug_looter_planner()
 
 static void update_camera(Camera2D &cam, flecs::world &ecs)
 {
-  static auto playerQuery = ecs.query<const Position, const IsPlayer>();
+  auto playerQuery = ecs.query<const Position, const IsPlayer>();
 
   playerQuery.each([&](const Position &pos, const IsPlayer &)
   {
     cam.target.x += (pos.x * tile_size - cam.target.x) * 0.1f;
     cam.target.y += (pos.y * tile_size - cam.target.y) * 0.1f;
+    cam.zoom *= (1.f - GetMouseWheelMove() * 0.1);
   });
 }
 
