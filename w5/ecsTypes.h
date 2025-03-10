@@ -24,6 +24,13 @@ struct Position
   Position &operator=(const MovePos &rhs);
 };
 
+inline float dist_sq(const Position& lhs, const Position& rhs)
+{
+	const int dx = lhs.x - rhs.x;
+	const int dy = lhs.y - rhs.y;
+	return float(dx * dx + dy * dy);
+}
+
 inline Position &Position::operator=(const MovePos &rhs)
 {
   x = rhs.x;
@@ -72,6 +79,7 @@ enum Actions
   EA_MOVE_END,
   EA_ATTACK = EA_MOVE_END,
   EA_HEAL_SELF,
+  EA_HEAL_AOE,
   EA_PASS,
   EA_NUM
 };
@@ -90,6 +98,11 @@ struct NumActions
 struct MeleeDamage
 {
   float damage = 2.f;
+};
+
+struct HealingAmount
+{
+	float amount = 0.f;
 };
 
 struct HealAmount

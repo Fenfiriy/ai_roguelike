@@ -32,10 +32,9 @@ void gen_drunk_dungeon(char *tiles, size_t w, size_t h)
   auto rndHt = std::bind(heightDist, heightGenerator);
   auto rndDir = std::bind(dirDist, dirGenerator);
 
-  const int dirs[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
 
   constexpr size_t numIter = 4;
-  constexpr size_t maxExcavations = 200;
+  constexpr size_t maxExcavations = 150;
   std::vector<Position> startPos;
   for (size_t iter = 0; iter < numIter; ++iter)
   {
@@ -49,7 +48,17 @@ void gen_drunk_dungeon(char *tiles, size_t w, size_t h)
       if (tiles[y * w + x] == dungeon::wall)
       {
         numExcavations++;
-        tiles[y * w + x] = dungeon::floor;
+        switch (iter)
+        {
+        case 0:
+			tiles[y * w + x] = dungeon::city;
+			break;
+		case 1:
+			tiles[y * w + x] = dungeon::lair;
+			break;
+		default:
+			tiles[y * w + x] = dungeon::floor;
+        }
       }
       // choose random dir
       size_t dir = rndDir(); // 0 - right, 1 - up, 2 - left, 3 - down
@@ -72,7 +81,8 @@ void gen_drunk_dungeon(char *tiles, size_t w, size_t h)
           pos.x += delta.x > 0 ? 1 : -1;
         else
           pos.y += delta.y > 0 ? 1 : -1;
-        tiles[size_t(pos.y) * w + size_t(pos.x)] = dungeon::floor;
+        if (tiles[size_t(pos.y) * w + size_t(pos.x)] == dungeon::wall)
+            tiles[size_t(pos.y) * w + size_t(pos.x)] = dungeon::floor;
       }
     }
 

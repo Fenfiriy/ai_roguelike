@@ -30,4 +30,10 @@ BehNode *find_enemy(flecs::entity entity, float dist, const char *bb_name);
 BehNode *flee(flecs::entity entity, const char *bb_name);
 BehNode *patrol(flecs::entity entity, float patrol_dist, const char *bb_name);
 BehNode *patch_up(float thres);
+BehNode* heal_aoe(float thres);
+BehNode* find_room_tile(flecs::entity entity, char tile, const char* bb_name);
+BehNode* find_teammate(flecs::entity entity, float dist, const char* bb_name);
+BehNode* find_team_healer(flecs::entity entity, float dist, const char* bb_name);
+BehNode* move_to_pos(flecs::entity entity, const char* bb_name);
+
 

@@ -11,6 +11,71 @@
 #include "dmapBeh.h"
 #include "rlikeObjects.h"
 
+char home[2] = { 'c', 'l' };
+
+static void create_guard_beh(flecs::entity e)
+{
+    e.set(Blackboard{});
+    BehNode* root =
+        selector({
+          sequence({
+            is_low_hp(99.f),
+			find_team_healer(e, 15.f, "healer"),
+            move_to_entity(e, "healer")
+          }),
+          sequence({
+            find_enemy(e, 3.f, "attack_enemy"),
+            move_to_entity(e, "attack_enemy")
+          }),
+          sequence({
+              find_room_tile(e, home[e.get<Team>()->team],"patrol_pos"),
+              move_to_pos(e, "patrol_pos")
+          })
+        });
+    e.set(BehaviourTree{ root });
+}
+
+static void create_healer_beh(flecs::entity e)
+{
+	e.set(Blackboard{});
+	BehNode* root =
+		selector({
+		  sequence({
+			find_teammate(e, 3.f, "need_healing"),
+			heal_aoe(e, "healer")
+		  }),
+		  sequence({
+			find_enemy(e, 3.f, "attack_enemy"),
+			move_to_entity(e, "attack_enemy")
+		  }),
+		  sequence({
+			  find_room_tile(e, home[e.get<Team>()->team],"patrol_pos"),
+			  move_to_pos(e, "patrol_pos")
+		  })
+			});
+	e.set(BehaviourTree{ root });
+}
+
+static void create_minotaur_beh(flecs::entity e)
+{
+    e.set(Blackboard{});
+    BehNode* root =
+        selector({
+          sequence({
+            is_low_hp(50.f),
+            find_enemy(e, 4.f, "flee_enemy"),
+            flee(e, "flee_enemy")
+          }),
+          sequence({
+            find_enemy(e, 3.f, "attack_enemy"),
+            move_to_entity(e, "attack_enemy")
+          }),
+          patrol(e, 2.f, "patrol_pos")
+            });
+    e.set(BehaviourTree{ root });
+}
+
+
 
 static void register_roguelike_systems(flecs::world &ecs)
 {
@@ -148,10 +213,10 @@ void init_roguelike(flecs::world &ecs)
         UnloadTexture(texture);
       });
 
-  create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
+  /*create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
   create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
   create_hive_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
-  create_hive(create_player_fleer(create_monster(ecs, Color{0, 255, 0, 255}, "minotaur_tex")));
+  create_hive(create_player_fleer(create_monster(ecs, Color{0, 255, 0, 255}, "minotaur_tex")));*/
 
   create_player(ecs, "swordsman_tex");
 
@@ -241,8 +306,10 @@ static void push_to_log(flecs::world &ecs, const char *msg)
 static void process_actions(flecs::world &ecs)
 {
   auto processActions = ecs.query<Action, Position, MovePos, const MeleeDamage, const Team>();
-  auto processHeals = ecs.query<Action, Hitpoints>();
+  auto processHeals = ecs.query<Action, const Position, Hitpoints, const Team>();
+  auto processAOEHeals = ecs.query<Action, const Position, Hitpoints, const Team, HealingAmount>();
   auto checkAttacks = ecs.query<const MovePos, Hitpoints, const Team>();
+  auto healAllies = ecs.query<const Position, Hitpoints, const Team>();
   // Process all actions
   ecs.defer([&]
   {
@@ -251,10 +318,25 @@ static void process_actions(flecs::world &ecs)
       if (a.action != EA_HEAL_SELF)
         return;
       a.action = EA_NOP;
-      push_to_log(ecs, "Monster healed itself");
-      hp.hitpoints += 10.f;
+          push_to_log(ecs, "Mob healed itself");
+          hp.hitpoints += 10.f;
+	});
 
-    });
+	processAOEHeals.each([&](Action& a, const Position& pos, Hitpoints& hp, const Team& team, const HealingAmount& amt)
+		{
+			if (a.action != EA_HEAL_AOE)
+				return;
+			a.action = EA_NOP;
+			healAllies.each([&](const Position& allyPos, Hitpoints& allyHp, const Team& allyTeam)
+				{
+					if (team.team == allyTeam.team && dist_sq(pos, allyPos) <= 9.f)
+					{
+						push_to_log(ecs, "Mob healed ally");
+						allyHp.hitpoints += amt.amount;
+					}
+				});
+		});
+
     processActions.each([&](flecs::entity entity, Action &a, Position &pos, MovePos &mpos, const MeleeDamage &dmg, const Team &team)
     {
       Position nextPos = move_pos(pos, a.action);

@@ -46,6 +46,24 @@ flecs::entity create_monster(flecs::world &ecs, Color col, const char *texture_s
     .set(Blackboard{});
 }
 
+flecs::entity create_healer(flecs::world& ecs, Color col, const char* texture_src)
+{
+	Position pos = find_free_dungeon_tile(ecs);
+	flecs::entity textureSrc = ecs.entity(texture_src);
+	return ecs.entity()
+		.set(Position{ pos.x, pos.y })
+		.set(MovePos{ pos.x, pos.y })
+		.set(Hitpoints{ 100.f })
+		.set(Action{ EA_NOP })
+		.set(Color{ col })
+		.add<TextureSource>(textureSrc)
+		.set(Team{ 0 })
+		.set(NumActions{ 1, 0 })
+		.set(MeleeDamage{ 10.f })
+		.set(HealingAmount{ 10.f })
+		.set(Blackboard{});
+}
+
 void create_player(flecs::world &ecs, const char *texture_src)
 {
   Position pos = find_free_dungeon_tile(ecs);

@@ -4,6 +4,7 @@
 #include "math.h"
 #include "raylib.h"
 #include "blackboard.h"
+#include "dungeonUtils.h"
 #include <algorithm>
 
 struct CompoundNode : public BehNode
@@ -113,6 +114,32 @@ struct MoveToEntity : public BehNode
   }
 };
 
+struct MoveToPos : public BehNode
+{
+    size_t posBb = size_t(-1);
+	MoveToPos(flecs::entity entity, const char* bb_name)
+	{
+		posBb = reg_entity_blackboard_var<Position>(entity, bb_name);
+	}
+	BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
+	{
+		BehResult res = BEH_RUNNING;
+
+		entity.insert([&](Action& a, const Position& pos)
+		{
+            Position targetPos = bb.get<Position>(posBb);
+			if (pos != targetPos)
+			{
+				a.action = move_towards(pos, targetPos);
+				res = BEH_RUNNING;
+			}
+			else
+				res = BEH_SUCCESS;
+		});
+		return res;
+	}
+};
+
 struct IsLowHp : public BehNode
 {
   float threshold = 0.f;
@@ -127,6 +154,42 @@ struct IsLowHp : public BehNode
     });
     return res;
   }
+};
+
+struct FindRoomTile : public BehNode
+{
+	char tile = ' ';
+	size_t posBb = size_t(-1);
+	FindRoomTile(flecs::entity entity, char t,const char* bb_name)
+	{
+		tile = t;
+		posBb = reg_entity_blackboard_var<Position>(entity, bb_name);
+	}
+	BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
+	{
+		BehResult res = BEH_FAIL;
+
+		auto dungeonDataQuery = ecs.query<const DungeonData>();
+		entity.insert([&](const Position& pos)
+		{
+			dungeonDataQuery.each([&](const DungeonData& dd)
+			{
+				// prebuild all walkable and get one of them
+				std::vector<Position> posList;
+				for (size_t y = 0; y < dd.height; ++y)
+					for (size_t x = 0; x < dd.width; ++x)
+                    {
+                        auto tt = dd.tiles[y * dd.width + x];
+                        if (dungeon::is_walkable(tt) && tt == tile)
+                            posList.push_back(Position{ int(x), int(y) });
+                    }
+				size_t rndIdx = size_t(GetRandomValue(0, int(posList.size()) - 1));
+				bb.set<Position>(posBb, posList[rndIdx]);
+				res = BEH_SUCCESS;
+			});
+		});
+        return res;
+	}
 };
 
 struct FindEnemy : public BehNode
@@ -166,6 +229,84 @@ struct FindEnemy : public BehNode
     });
     return res;
   }
+};
+
+struct FindTeammate : public BehNode
+{
+    size_t entityBb = size_t(-1);
+    float distance = 0;
+    FindTeammate(flecs::entity entity, float in_dist, const char* bb_name) : distance(in_dist)
+    {
+        entityBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
+    }
+    BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
+    {
+        BehResult res = BEH_FAIL;
+        auto teammatesQuery = ecs.query<const Position, const Team>();
+        entity.insert([&](const Position& pos, const Team& t)
+            {
+                flecs::entity closestTeammate;
+                float closestDist = FLT_MAX;
+                Position closestPos;
+                teammatesQuery.each([&](flecs::entity mate, const Position& epos, const Team& et)
+                    {
+                        if (t.team != et.team)
+                            return;
+                        float curDist = dist(epos, pos);
+                        if (curDist < closestDist)
+                        {
+                            closestDist = curDist;
+                            closestPos = epos;
+                            closestTeammate = mate;
+                        }
+                    });
+                if (ecs.is_valid(closestTeammate) && closestDist <= distance)
+                {
+                    bb.set<flecs::entity>(entityBb, closestTeammate);
+                    res = BEH_SUCCESS;
+                }
+            });
+        return res;
+    }
+};
+
+struct FindTeamHealer : public BehNode
+{
+    size_t entityBb = size_t(-1);
+    float distance = 0;
+    FindTeamHealer(flecs::entity entity, float in_dist, const char* bb_name) : distance(in_dist)
+    {
+        entityBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
+    }
+    BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
+    {
+        BehResult res = BEH_FAIL;
+        auto teammatesQuery = ecs.query<const Position, const Team>();
+        entity.insert([&](const Position& pos, const Team& t)
+            {
+                flecs::entity closestTeammate;
+                float closestDist = FLT_MAX;
+                Position closestPos;
+				teammatesQuery.each([&](flecs::entity mate, const Position& epos, const Team& et) // добавить проверку на хилера
+                    {
+                        if (t.team != et.team)
+                            return;
+                        float curDist = dist(epos, pos);
+                        if (curDist < closestDist)
+                        {
+                            closestDist = curDist;
+                            closestPos = epos;
+                            closestTeammate = mate;
+                        }
+                    });
+                if (ecs.is_valid(closestTeammate) && closestDist <= distance)
+                {
+                    bb.set<flecs::entity>(entityBb, closestTeammate);
+                    res = BEH_SUCCESS;
+                }
+            });
+        return res;
+    }
 };
 
 struct Flee : public BehNode
@@ -244,6 +385,24 @@ struct PatchUp : public BehNode
   }
 };
 
+struct HealAOE : public BehNode
+{
+	float hpThreshold = 100.f;
+	HealAOE(float threshold) : hpThreshold(threshold) {}
+	BehResult update(flecs::world&, flecs::entity entity, Blackboard&) override
+	{
+		BehResult res = BEH_SUCCESS;
+		entity.insert([&](Action& a, Hitpoints& hp)
+			{
+				if (hp.hitpoints >= hpThreshold)
+					return;
+				res = BEH_RUNNING;
+				a.action = EA_HEAL_AOE;
+			});
+		return res;
+	}
+};
+
 
 
 BehNode *sequence(const std::vector<BehNode*> &nodes)
@@ -299,4 +458,28 @@ BehNode *patch_up(float thres)
   return new PatchUp(thres);
 }
 
+BehNode* move_to_pos(flecs::entity entity, const char* bb_name)
+{
+	return new MoveToPos(entity, bb_name);
+}
+
+BehNode* find_room_tile(flecs::entity entity, char tile, const char* bb_name)
+{
+	return new FindRoomTile(entity, tile, bb_name);
+}
+
+BehNode* find_teammate(flecs::entity entity, float dist, const char* bb_name)
+{
+	return new FindTeammate(entity, dist, bb_name);
+}
+
+BehNode* find_team_healer(flecs::entity entity, float dist, const char* bb_name)
+{
+	return new FindTeamHealer(entity, dist, bb_name);
+}
+
+BehNode* heal_aoe(float thres)
+{
+	return new HealAOE(thres);
+}
 

@@ -235,9 +235,9 @@ static void update_camera(Camera2D &cam, flecs::world &ecs)
 
 int main(int /*argc*/, const char ** /*argv*/)
 {
-  int width = 1920;
-  int height = 1080;
-  InitWindow(width, height, "w3 AI MIPT");
+  int width = 1600;
+  int height = 900;
+  InitWindow(width, height, "AI MIPT");
 
   const int scrWidth = GetMonitorWidth(0);
   const int scrHeight = GetMonitorHeight(0);
@@ -257,7 +257,7 @@ int main(int /*argc*/, const char ** /*argv*/)
     init_dungeon(ecs, tiles, dungWidth, dungHeight);
   }
   init_roguelike(ecs);
-  //debug_enemy_planner();
+  debug_enemy_planner();
   debug_looter_planner();
 
   Camera2D camera = { {0, 0}, {0, 0}, 0.f, 1.f };
