@@ -12,6 +12,7 @@
 #include "rlikeObjects.h"
 
 char home[2] = { 'c', 'l' };
+char work[2] = { 'l', 'c' };
 
 static void create_guard_beh(flecs::entity e)
 {
@@ -19,7 +20,7 @@ static void create_guard_beh(flecs::entity e)
     BehNode* root =
         selector({
           sequence({
-            is_low_hp(99.f),
+            is_low_hp(100.f),
 			find_team_healer(e, 15.f, "healer"),
             move_to_entity(e, "healer")
           }),
@@ -28,7 +29,7 @@ static void create_guard_beh(flecs::entity e)
             move_to_entity(e, "attack_enemy")
           }),
           sequence({
-              find_room_tile(e, home[e.get<Team>()->team],"patrol_pos"),
+              find_room_tile(e, home[0],"patrol_pos"),
               move_to_pos(e, "patrol_pos")
           })
         });
@@ -41,19 +42,79 @@ static void create_healer_beh(flecs::entity e)
 	BehNode* root =
 		selector({
 		  sequence({
-			find_teammate(e, 3.f, "need_healing"),
-			heal_aoe(e, "healer")
+			find_team_wounded(e, 3.f, 100.f, "need_healing"),
+			heal_aoe()
 		  }),
 		  sequence({
-			find_enemy(e, 3.f, "attack_enemy"),
-			move_to_entity(e, "attack_enemy")
+			find_enemy(e, 3.f, "flee_enemy"),
+            flee(e, "flee_enemy")
 		  }),
 		  sequence({
-			  find_room_tile(e, home[e.get<Team>()->team],"patrol_pos"),
+			  find_room_tile(e, home[0],"patrol_pos"),
 			  move_to_pos(e, "patrol_pos")
 		  })
 			});
 	e.set(BehaviourTree{ root });
+}
+
+static void create_warrior_beh(flecs::entity e)
+{
+    e.set(Blackboard{});
+    BehNode* root =
+        selector({
+          sequence({
+            is_low_hp(50.f),
+            find_room_tile(e, home[0],"flee_pos"),
+            move_to_pos(e, "flee_pos")
+          }),
+          sequence({
+            find_team_healer(e, 3.f, "healer"),
+            move_to_entity(e, "healer")
+          }),
+          sequence({
+            find_enemy(e, 3.f, "attack_enemy"),
+            move_to_entity(e, "attack_enemy")
+          }),
+          sequence({
+              find_room_tile(e, work[0],"patrol_pos"),
+              move_to_pos(e, "patrol_pos")
+          })
+            });
+    e.set(BehaviourTree{ root });
+}
+
+static void create_monster_warrior_beh(flecs::entity e)
+{
+    e.set(Blackboard{});
+    BehNode* root =
+        selector({
+          sequence({
+            find_enemy(e, 3.f, "attack_enemy"),
+            move_to_entity(e, "attack_enemy")
+          }),
+          sequence({
+              find_room_tile(e, work[1],"patrol_pos"),
+              move_to_pos(e, "patrol_pos")
+          })
+            });
+    e.set(BehaviourTree{ root });
+}
+
+static void create_monster_guard_beh(flecs::entity e)
+{
+    e.set(Blackboard{});
+    BehNode* root =
+        selector({
+          sequence({
+            find_enemy(e, 3.f, "attack_enemy"),
+            move_to_entity(e, "attack_enemy")
+          }),
+          sequence({
+              find_room_tile(e, home[1],"patrol_pos"),
+              move_to_pos(e, "patrol_pos")
+          })
+            });
+    e.set(BehaviourTree{ root });
 }
 
 static void create_minotaur_beh(flecs::entity e)
@@ -194,6 +255,7 @@ static void register_roguelike_systems(flecs::world &ecs)
           }
       });
     });
+  
 }
 
 
@@ -212,16 +274,13 @@ void init_roguelike(flecs::world &ecs)
       {
         UnloadTexture(texture);
       });
-
-  /*create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_hive_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
-  create_hive(create_player_fleer(create_monster(ecs, Color{0, 255, 0, 255}, "minotaur_tex")));*/
+  create_healer_beh(create_healer(ecs, Color{ 0x00, 0xee, 0x00, 0xff }, "swordsman_tex"));
 
   create_player(ecs, "swordsman_tex");
 
   ecs.entity("world")
     .set(TurnCounter{})
+	.set(SpawnData{})
     .set(ActionLog{});
 }
 
@@ -252,6 +311,10 @@ void init_dungeon(flecs::world &ecs, char *tiles, size_t w, size_t h)
         tileEntity.add<TextureSource>(wallTex);
       else if (tile == dungeon::floor)
         tileEntity.add<TextureSource>(floorTex);
+	  else if (tile == dungeon::city)
+		  tileEntity.set(Color{ 255, 255, 255, 255 });
+	  else if (tile == dungeon::lair)
+          tileEntity.set(Color{ 255, 0, 0, 255 });
     }
 }
 
@@ -306,7 +369,7 @@ static void push_to_log(flecs::world &ecs, const char *msg)
 static void process_actions(flecs::world &ecs)
 {
   auto processActions = ecs.query<Action, Position, MovePos, const MeleeDamage, const Team>();
-  auto processHeals = ecs.query<Action, const Position, Hitpoints, const Team>();
+  auto processHeals = ecs.query<Action, Hitpoints>();
   auto processAOEHeals = ecs.query<Action, const Position, Hitpoints, const Team, HealingAmount>();
   auto checkAttacks = ecs.query<const MovePos, Hitpoints, const Team>();
   auto healAllies = ecs.query<const Position, Hitpoints, const Team>();
@@ -488,6 +551,23 @@ void process_turn(flecs::world &ecs)
     ecs.entity("hive_follower_sum")
       .set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8f, 0.8f}}}})
       .add<VisualiseMap>();
+
+    ecs.each([&](TurnCounter& tc, SpawnData& s)
+            {
+                if (tc.count > 0)
+                {
+                    if (tc.count % s.cityCD == 0)
+                    {
+                        create_guard_beh(create_warrior(ecs, Color{ 0xee, 0x00, 0xee, 0xff }, "swordsman_tex"));
+                        create_warrior_beh(create_warrior(ecs, Color{ 0xee, 0x00, 0x00, 0xff }, "swordsman_tex"));
+                    }
+                    if (tc.count % s.lairCD == 0)
+                    {
+                        create_monster_guard_beh(create_monster(ecs, Color{ 0xee, 0x00, 0xee, 0xff }, "minotaur_tex"));
+                        create_monster_warrior_beh(create_monster(ecs, Color{ 0xee, 0x00, 0x00, 0xff }, "minotaur_tex"));
+                    }
+                }
+            });
   }
 }
 

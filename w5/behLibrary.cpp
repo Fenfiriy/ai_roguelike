@@ -281,13 +281,13 @@ struct FindTeamHealer : public BehNode
     BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
     {
         BehResult res = BEH_FAIL;
-        auto teammatesQuery = ecs.query<const Position, const Team>();
+        auto teammatesQuery = ecs.query<const Position, const Team, HealingAmount>();
         entity.insert([&](const Position& pos, const Team& t)
             {
                 flecs::entity closestTeammate;
                 float closestDist = FLT_MAX;
                 Position closestPos;
-				teammatesQuery.each([&](flecs::entity mate, const Position& epos, const Team& et) // добавить проверку на хилера
+				teammatesQuery.each([&](flecs::entity mate, const Position& epos, const Team& et, HealingAmount ha) // добавить проверку на хилера
                     {
                         if (t.team != et.team)
                             return;
@@ -307,6 +307,46 @@ struct FindTeamHealer : public BehNode
             });
         return res;
     }
+};
+
+struct FindTeamWounded : public BehNode
+{
+	size_t entityBb = size_t(-1);
+	float distance = 0;
+	float hpThreshold = 0;
+	FindTeamWounded(flecs::entity entity, float in_dist, float minHp, const char* bb_name) : distance(in_dist), hpThreshold(minHp)
+	{
+		entityBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
+	}
+	BehResult update(flecs::world& ecs, flecs::entity entity, Blackboard& bb) override
+	{
+		BehResult res = BEH_FAIL;
+		auto teammatesQuery = ecs.query<const Position, const Team, Hitpoints>();
+		entity.insert([&](const Position& pos, const Team& t)
+			{
+				flecs::entity closestTeammate;
+				float closestDist = FLT_MAX;
+				Position closestPos;
+				teammatesQuery.each([&](flecs::entity mate, const Position& epos, const Team& et, Hitpoints hp)
+					{
+						if (t.team != et.team)
+							return;
+						float curDist = dist(epos, pos);
+						if (curDist < closestDist && hp.hitpoints < hpThreshold)
+						{
+							closestDist = curDist;
+							closestPos = epos;
+							closestTeammate = mate;
+						}
+					});
+				if (ecs.is_valid(closestTeammate) && closestDist <= distance)
+				{
+					bb.set<flecs::entity>(entityBb, closestTeammate);
+					res = BEH_SUCCESS;
+				}
+			});
+		return res;
+	}
 };
 
 struct Flee : public BehNode
@@ -387,15 +427,11 @@ struct PatchUp : public BehNode
 
 struct HealAOE : public BehNode
 {
-	float hpThreshold = 100.f;
-	HealAOE(float threshold) : hpThreshold(threshold) {}
 	BehResult update(flecs::world&, flecs::entity entity, Blackboard&) override
 	{
 		BehResult res = BEH_SUCCESS;
-		entity.insert([&](Action& a, Hitpoints& hp)
+		entity.insert([&](Action& a)
 			{
-				if (hp.hitpoints >= hpThreshold)
-					return;
 				res = BEH_RUNNING;
 				a.action = EA_HEAL_AOE;
 			});
@@ -478,8 +514,13 @@ BehNode* find_team_healer(flecs::entity entity, float dist, const char* bb_name)
 	return new FindTeamHealer(entity, dist, bb_name);
 }
 
-BehNode* heal_aoe(float thres)
+BehNode* find_team_wounded(flecs::entity entity, float dist, float minHp, const char* bb_name)
 {
-	return new HealAOE(thres);
+	return new FindTeamWounded(entity, dist, minHp, bb_name);
+}
+
+BehNode* heal_aoe()
+{
+	return new HealAOE();
 }
 

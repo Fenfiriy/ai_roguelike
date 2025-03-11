@@ -161,6 +161,12 @@ struct DungeonData
   size_t height;
 };
 
+struct SpawnData
+{
+	int cityCD = 7;
+	int lairCD = 5;
+};
+
 struct DijkstraMapData
 {
   std::vector<float> map;
