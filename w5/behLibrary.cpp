@@ -6,6 +6,7 @@
 #include "blackboard.h"
 #include "dungeonUtils.h"
 #include <algorithm>
+#include "astar.h"
 
 struct CompoundNode : public BehNode
 {
@@ -89,6 +90,7 @@ struct MoveToEntity : public BehNode
   }
 
   BehResult update(flecs::world &, flecs::entity entity, Blackboard &bb) override
+  BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
   {
     BehResult res = BEH_RUNNING;
     entity.insert([&](Action &a, const Position &pos)
@@ -103,8 +105,14 @@ struct MoveToEntity : public BehNode
       {
         if (pos != target_pos)
         {
-          a.action = move_towards(pos, target_pos);
-          res = BEH_RUNNING;
+            Position p;
+            auto dungeonDataQuery = ecs.query<const DungeonData>();
+            dungeonDataQuery.each([&](const DungeonData& dd){
+                auto pnav = Astar(dd);
+                p = pnav.init_search(pos, target_pos).back();
+                });
+            a.action = move_towards(pos, p);
+            res = BEH_RUNNING;
         }
         else
           res = BEH_SUCCESS;
@@ -128,11 +136,17 @@ struct MoveToPos : public BehNode
 		entity.insert([&](Action& a, const Position& pos)
 		{
             Position targetPos = bb.get<Position>(posBb);
-			if (pos != targetPos)
-			{
-				a.action = move_towards(pos, targetPos);
-				res = BEH_RUNNING;
-			}
+            if (pos != targetPos)
+            {
+                Position p;
+                auto dungeonDataQuery = ecs.query<const DungeonData>();
+                dungeonDataQuery.each([&](const DungeonData& dd) {
+                    auto pnav = Astar(dd);
+                    p = pnav.init_search(pos, targetPos).back();
+                    });
+                a.action = move_towards(pos, p);
+                res = BEH_RUNNING;
+            }
 			else
 				res = BEH_SUCCESS;
 		});

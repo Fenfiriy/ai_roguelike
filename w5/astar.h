@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <map>
 #include "ecsTypes.h"
 #include "dungeonUtils.h"
 
@@ -6,21 +7,22 @@ struct scores
 {
 	float g = 0;
 	float h = 0;
+	int prev_idx = -1;
 };
 
 class Astar
 {
+public:
 	DungeonData dd;
 	std::vector<int> open_list;
 	std::vector<int> closed_list;
-	std::vector<scores> scores_list;
+	std::map<int, scores> scores_map;
 
 
 	Astar(const DungeonData& dd) : dd(dd)
 	{
 		open_list.reserve(dd.width * dd.height);
 		closed_list.reserve(dd.width * dd.height);
-		scores_list.reserve(dd.width * dd.height);
 	}
 
 	int coords2idx(const Position& pos)
@@ -31,25 +33,26 @@ class Astar
 	{
 		return Position{ (int)(idx % dd.width), (int)(idx / dd.width) };
 	}
-	void init_search(Position start, Position goal)
+	std::vector<Position> init_search(Position start, Position goal)
 	{
 		open_list.clear();
 		closed_list.clear();
-		scores_list.clear();
+		scores_map.clear();
 		open_list.push_back(coords2idx(start));
-		scores_list.push_back(scores{ 0, dist_sq(start, goal)});
+		scores_map[coords2idx(start)] = (scores{ 0, dist_sq(start, goal), -1 });
+
+		int cur;
 
 		while (open_list.size() > 0)
 		{
-			int cur = open_list[0];
+			cur = open_list[0];
+			open_list.erase(open_list.begin());
+			closed_list.push_back(cur);
 
 			if (cur == coords2idx(goal))
 			{
 				break;
 			}
-
-			open_list.erase(open_list.begin());
-			closed_list.push_back(cur);
 
 			Position cur_pos = idx2coords(cur);
 			for (int d = 0; d < 4; d++)
@@ -69,25 +72,34 @@ class Astar
 					continue;
 				}
 
-				float g = scores_list[cur].g + 1;
+				float g = scores_map[cur].g + 1;
 				float h = dist_sq(next_pos, goal);
 				if (std::find(open_list.begin(), open_list.end(), next_idx) == open_list.end())
 				{
 					open_list.push_back(next_idx);
-					scores_list.push_back(scores{ g, h });
+					scores_map[next_idx] = (scores{ g, h, cur });
 				}
 				else
 				{
-					if (g + h < scores_list[next_idx].g + scores_list[next_idx].h)
+					if (g + h < scores_map[next_idx].g + scores_map[next_idx].h)
 					{
-						scores_list[next_idx] = scores{ g, h };
+						scores_map[next_idx] = scores{ g, h, cur };
 					}
 				}
 			}
 
-			std::sort(open_list.begin(), open_list.end(), [this](int a, int b) { return scores_list[a].g + scores_list[a].h < scores_list[b].g + scores_list[b].h; });
-
-
+			std::sort(open_list.begin(), open_list.end(), [this](int a, int b) { return scores_map[a].g + scores_map[a].h < scores_map[b].g + scores_map[b].h; });
+			printf("%i", cur);
 		}
+
+		std::vector<Position> path;
+		while (cur != coords2idx(start))
+		{
+			path.push_back(idx2coords(cur));
+			cur = scores_map[cur].prev_idx;
+			printf("%i", cur);
+		}
+
+		return path;
 	}
 };
