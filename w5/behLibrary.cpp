@@ -89,7 +89,6 @@ struct MoveToEntity : public BehNode
     entityBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
   }
 
-  BehResult update(flecs::world &, flecs::entity entity, Blackboard &bb) override
   BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
   {
     BehResult res = BEH_RUNNING;
